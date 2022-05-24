@@ -157,7 +157,7 @@ def encode(df, na_values={'NaN'}, domains=dict()):
     encoders = dict()
     for col in df.columns:
         col_encoder = LabelEncoder()
-        res[col] = col_encoder.fit_transform(df[col])      
+        res[col] = col_encoder.fit_transform(df[col])
         res.loc[df[col].isnull(), col] = np.nan
         res[col] = res[col].astype('category')
         encoders[col] = col_encoder

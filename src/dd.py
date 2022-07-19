@@ -238,30 +238,30 @@ class tDBIndex:
 class ContingencyTable:
     """ A contingency table. 
     
-     contingency table for inference (protected=None, n1=a,n2=c)
+     contingency table for inference (protected=true.pos, n1=a,n2=c)
      ===========
      true.pos      a             
      true.neg      c             
      ===========   n()
     
-     contingency table for independence (TPp=FNp=TPu=FNu=None)
-     =========== pred.pos === pred.neg === 
-     protected       a            b       n1()
-     unprotected     c            d       n2()
-     ===========    m1()  ===    m2()  ==  n()
-    
-     confusion matrix (TPp=FNp=TPu=FNu=None)
+     confusion matrix (protected=true.pos)
      =========== pred.pos === pred.neg === 
      true.pos        a            b       n1()
      true.neg        c            d       n2()
      ===========    m1()  ===    m2()  ==  n()
+
+     contingency table for independence
+     =========== positives === negatives === 
+     protected       a            b       n1()
+     unprotected     c            d       n2()
+     ===========    m1()  ===    m2()  ==  n()
     
      contingency table for separation
           protected                                   unprotected
-     ========== pred.pos == pred.neg ===      === pred.pos  == tpred.neg === 
-     true.pos    TPp          FNp      Pp()          TPu          FNu        Pu()
-     true.neg    FPp          TNp      Np()          FPu          TNu        Nu()
-     ==========   a     =====  b  ===  n1()   ===      c    ====    d   ===  n2()
+     ========= pred.pos  ==  pred.neg  ===     ====  pred.pos  ==  pred.neg  === 
+     true.pos    TPp          FNp      Pp()           TPu           FNu      Pu()
+     true.neg    FPp          TNp      Np()           FPu           TNu      Nu()
+     ==========   a     =====  b  ===  n1()   ====     c    ====     d  ===  n2()
     """
     def __init__(self, a, n1, c, n2, TPp=None, Pp=None, TPu=None, Pu=None, 
                  avgdecNeg=0.5, avgtruNeg=0.5, ctx=None, ctx_n=None, protected=None):
@@ -276,10 +276,12 @@ class ContingencyTable:
         self.FPp = self.a - self.TPp
         self.FNp = int(0) if Pp is None else int(Pp)-self.TPp
         self.TNp = self.b - self.FNp
-        self.TPu = self.c if TPu is None else int(TPu)
+
+        self.TPu = self.a if TPu is None else int(TPu)
         self.FPu = self.c - self.TPu
         self.FNu = int(0) if Pu is None else int(Pu)-self.TPu
-        self.TNu = self.d - self.FNu    
+        self.TNu = self.d - self.FNu
+
         self.avgdecNeg = None if avgdecNeg is None else float(avgdecNeg)
         self.avgtruNeg = None if avgtruNeg is None else float(avgtruNeg)
         self.ctx = ctx
@@ -386,11 +388,7 @@ class ContingencyTable:
     def acc_diff(self):
         ''' Accuracy equality '''
         return self.accu() - self.accp()
-    
-    def fpr_diff(self):
-        ''' Predictive equality '''
-        return self.FPu/self.Nu() - self.FPp/self.Np()
-    
+   
     def tpru(self):
         return self.TPu/self.Pu()
     
@@ -399,7 +397,17 @@ class ContingencyTable:
     
     def tpr_diff(self):
         ''' Equal opportunity '''
-        return self.tpru() - self.tprp()
+        return self.tprp() - self.tpru()
+    
+    def tnru(self):
+        return self.TNu/self.Nu()
+    
+    def tnrp(self):
+        return self.TNp/self.Np()
+    
+    def tnr_diff(self):
+        ''' Equal opportunity '''
+        return self.tnru()-self.tnrp()
     
     def eq_odds(self):
         ''' Equalized odds '''
@@ -422,7 +430,7 @@ class DD:
             self.tDB, self.codes, self.decodes = PD2tranDB(df, na_values=na_values, domains=domains)
         else:
             self.tDB, self.codes, self.decodes = CSV2tranDB(df, na_values=na_values, domains=domains)
-        self.decodes[-1] = 'protected'
+        self.decodes[-1] = unprotectedItem.replace('=', '!=')
         #print(self.decodes)
         self.itDB = tDBIndex(self.tDB)
 
@@ -524,6 +532,9 @@ class DD:
                             heapq.heappush(q, (v, ctg))
                         else:
                             heapq.heappushpop(q, (v, ctg))
+        if len(self.protected)>1:
+            ms = -minSupp if minSupp<0 else int(minSupp*self.itDB.nrows)
+            q = [ctg for ctg in q if ctg[1].n() >= ms] 
         return sorted(q, reverse=True)
     
     def ctg_global(self):
@@ -568,7 +579,7 @@ class DD:
 
     def ctg_any(self, ctx=None):
         """ Return contingency table(s) for a specified coverage and ANY protected """
-
+        ctx_code = [] if ctx is None else [-1]
         ctx = self.itDB.cover_all() if ctx is None else ctx
         prCover = self.itDB.cover_none()
         for protected in self.protected:
@@ -599,7 +610,7 @@ class DD:
             Pp = ctx.intersection_cardinality(pr_negtru)
         ctg = ContingencyTable(a, n1, c, n2, TPp, Pp, TPu, Pu, 
                 avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
-                ctx=[-1], ctx_n=len(ctx), protected=-1 if len(self.protected)>1 else self.protected[0])
+                ctx=ctx_code, ctx_n=len(ctx), protected=-1 if len(self.protected)>1 else self.protected[0])
         return ctg
 
     def ctg_rel(self, ctg, base):
@@ -668,7 +679,7 @@ class DD:
             print(spec.format('', self.denydecItem, self.grantdecItem, '', '', self.denydecItem, self.grantdecItem, ''))
             print(spec.format(self.denytruItem, ctg.TPp, ctg.FNp, ctg.Pp(), self.denytruItem, ctg.TPu, ctg.FNu, ctg.Pu()))
             print(spec.format(self.granttruItem, ctg.FPp, ctg.TNp, ctg.Np(), self.granttruItem, ctg.FPu, ctg.TNu, ctg.Nu()))
-            print(spec.format('', ctg.a, ctg.b, ctg.n1(), '', ctg.c, ctg.d, ctg.n2()))
+            print(spec.format('', ctg.a, ctg.b, ctg.n1(), '', ctg.d, ctg.c, ctg.n2()))
             
     def cover_n(self, patterns, f, k=None):
         """ Naive max cover 

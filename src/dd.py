@@ -470,6 +470,64 @@ class DD:
             self.avgtruNeg = len(self.negtruCover) / self.itDB.nrows
             self.unpr_negtru = self.unprCover & self.negtruCover
        
+    def ctg(self, itemset, protected, cover=None):
+        if len(itemset)>0 and isinstance(itemset[0],str):
+            itemset = [self.codes[i] for i in itemset]
+        ctx = self.itDB.cover(itemset) if cover is None else cover
+        if self.denydecItem is None:
+            c = ctx.intersection_cardinality(self.unprCover)
+            if protected==-1: # any protected
+                prCover = self.itDB.cover_none()
+                for pr in self.protected:
+                    prCover |= self.itDB.covers[pr]
+            else:
+                prCover = self.itDB.covers[protected]
+            a = ctx.intersection_cardinality(prCover)
+            ctg = ContingencyTable(a=a, n1=a, c=c, n2=c, TPp=None, Pp=None, 
+                    TPu=None, Pu=None, avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
+                    ctx=itemset, ctx_n=len(ctx), protected=protected)
+        else:
+            n2 = ctx.intersection_cardinality(self.unprCover)
+            ctx_negdec = ctx & self.negdecCover
+            c = ctx_negdec.intersection_cardinality(self.unprCover)
+            if self.negtruDec is None:
+                TPu = Pu = None
+            else:
+                TPu = ctx_negdec.intersection_cardinality(self.unpr_negtru)
+                Pu = ctx.intersection_cardinality(self.unpr_negtru)
+            if protected==-1: # any protected
+                prCover = self.itDB.cover_none()
+                for pr in self.protected:
+                    prCover |= self.itDB.covers[pr]
+            else:
+                prCover = self.itDB.covers[protected]
+            n1 = ctx.intersection_cardinality(prCover)
+            a = ctx_negdec.intersection_cardinality(prCover)
+            if self.negtruDec is None:
+                TPp = Pp = None
+            else:
+                pr_negtru = prCover & self.negtruCover
+                TPp = ctx_negdec.intersection_cardinality(pr_negtru)
+                Pp = ctx.intersection_cardinality(pr_negtru)
+            ctg = ContingencyTable(a=a, n1=n1, c=c, n2=n2, TPp=TPp, Pp=Pp, 
+                   TPu=TPu, Pu=Pu, avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
+                   ctx=itemset, ctx_n=len(ctx), protected=protected)
+        return ctg
+
+    def ctg_global(self, itemset=[]):
+        """ Return contingency table(s) for the whole dataset """
+        return [self.ctg(itemset, protected) for protected in self.protected]
+
+    def ctg_rel(self, ctg, base=None):
+        """ Return contingency table by changing the context to a given bitmap """
+        if base is None:
+            return self.ctg(ctg.ctx, ctg.protected, cover=self.itDB.cover(ctg.ctx))            
+        return self.ctg(ctg.ctx, ctg.protected, cover=self.itDB.cover(ctg.ctx) & base)
+
+    def ctg_any(self, itemset=[], cover=None):
+        """ Return contingency table(s) for a specified coverage and ANY protected """
+        return self.ctg(itemset, -1, cover=cover)
+
     def extract(self, minSupp=20, testCond=lambda x: 0, topk=0, target='c'):
         """ Extract top-k contingency tables with minimum support and satisfying a test condition
         
@@ -537,116 +595,6 @@ class DD:
             q = [ctg for ctg in q if ctg[1].n() >= ms] 
         return sorted(q, reverse=True)
     
-    def ctg_global(self):
-        """ Return contingency table(s) for the whole dataset """
- 
-        res = []       
-        ctx = self.itDB.cover([]) 
-        if self.denydecItem is None:
-            c = ctx.intersection_cardinality(self.unprCover)
-            for protected in self.protected:
-                prCover = self.itDB.covers[protected]
-                a = ctx.intersection_cardinality(prCover)
-                ctg = ContingencyTable(a=a, n1=a, c=c, n2=c, TPp=None, Pp=None, 
-                        TPu=None, Pu=None, avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
-                        ctx=[], ctx_n=int(self.itDB.nrows), protected=protected)
-                res.append(ctg)
-        else:     
-            unpr_negtru = self.unprCover if self.negtruCover is None else self.unprCover & self.negtruCover  
-            n2 = ctx.intersection_cardinality(self.unprCover)
-            ctx_negdec = ctx & self.negdecCover
-            c = ctx_negdec.intersection_cardinality(self.unprCover)
-            if self.negtruDec is None:
-                TPu = Pu = None
-            else:
-                TPu = ctx_negdec.intersection_cardinality(unpr_negtru)
-                Pu = ctx.intersection_cardinality(unpr_negtru)
-            for protected in self.protected:
-                prCover = self.itDB.covers[protected]
-                n1 = ctx.intersection_cardinality(prCover)
-                a = ctx_negdec.intersection_cardinality(prCover)
-                if self.negtruDec is None:
-                    TPp = Pp = None
-                else:                    
-                    pr_negtru = prCover & self.negtruCover
-                    TPp = ctx_negdec.intersection_cardinality(pr_negtru)
-                    Pp = ctx.intersection_cardinality(pr_negtru)
-                ctg = ContingencyTable(a, n1, c, n2, TPp, Pp, TPu, Pu, 
-                        avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
-                        ctx=[], ctx_n=int(self.itDB.nrows), protected=protected)
-                res.append(ctg)
-        return res
-
-    def ctg_any(self, ctx=None):
-        """ Return contingency table(s) for a specified coverage and ANY protected """
-        ctx_code = [] if ctx is None else [-1]
-        ctx = self.itDB.cover_all() if ctx is None else ctx
-        prCover = self.itDB.cover_none()
-        for protected in self.protected:
-            prCover |= self.itDB.covers[protected]
-        if self.denydecItem is None:
-            c = ctx.intersection_cardinality(self.unprCover)
-            a = ctx.intersection_cardinality(prCover)
-            ctg = ContingencyTable(a=a, n1=a, c=c, n2=c, TPp=None, Pp=None, 
-                    TPu=None, Pu=None, avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
-                    ctx=[-1], ctx_n=len(ctx), protected=-1 if len(self.protected)>1 else self.protected[0])
-            return ctg
-        unpr_negtru = self.unprCover if self.negtruCover is None else self.unprCover & self.negtruCover  
-        n2 = ctx.intersection_cardinality(self.unprCover)
-        ctx_negdec = ctx & self.negdecCover
-        c = ctx_negdec.intersection_cardinality(self.unprCover)
-        if self.negtruDec is None:
-            TPu = Pu = None
-        else:
-            TPu = ctx_negdec.intersection_cardinality(unpr_negtru)
-            Pu = ctx.intersection_cardinality(unpr_negtru)
-        n1 = ctx.intersection_cardinality(prCover)
-        a = ctx_negdec.intersection_cardinality(prCover)
-        if self.negtruDec is None:
-            TPp = Pp = None
-        else:                    
-            pr_negtru = prCover & self.negtruCover
-            TPp = ctx_negdec.intersection_cardinality(pr_negtru)
-            Pp = ctx.intersection_cardinality(pr_negtru)
-        ctg = ContingencyTable(a, n1, c, n2, TPp, Pp, TPu, Pu, 
-                avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
-                ctx=ctx_code, ctx_n=len(ctx), protected=-1 if len(self.protected)>1 else self.protected[0])
-        return ctg
-
-    def ctg_rel(self, ctg, base):
-        """ Return contingency table by changing the context to a given bitmap """
-        ctx = self.itDB.cover(ctg.ctx) & base
-        protected = ctg.protected 
-        if self.denydecItem is None:
-            c = ctx.intersection_cardinality(self.unprCover)
-            prCover = self.itDB.covers[protected]
-            a = ctx.intersection_cardinality(prCover)
-            rel_ctg = ContingencyTable(a=a, n1=a, c=c, n2=c, TPp=None, Pp=None, 
-                    TPu=None, Pu=None, avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
-                    ctx=ctg.ctx, ctx_n=len(ctx), protected=protected)
-        else:     
-            n2 = ctx.intersection_cardinality(self.unprCover)
-            ctx_negdec = ctx & self.negdecCover
-            c = ctx_negdec.intersection_cardinality(self.unprCover)
-            if self.negtruDec is None:
-                TPu = Pu = None
-            else:
-                TPu = ctx_negdec.intersection_cardinality(self.unpr_negtru)
-                Pu = ctx.intersection_cardinality(self.unpr_negtru)
-            prCover = self.itDB.covers[protected]
-            n1 = ctx.intersection_cardinality(prCover)
-            a = ctx_negdec.intersection_cardinality(prCover)
-            if self.negtruDec is None:
-                TPp = Pp = None
-            else:
-                pr_negtru = prCover & self.negtruCover
-                TPp = ctx_negdec.intersection_cardinality(pr_negtru)
-                Pp = ctx.intersection_cardinality(pr_negtru)
-            rel_ctg = ContingencyTable(a, n1, c, n2, TPp, Pp, TPu, Pu, 
-                        avgdecNeg=self.avgdecNeg, avgtruNeg=self.avgtruNeg,
-                        ctx=ctg.ctx, ctx_n=len(ctx), protected=protected)
-        return rel_ctg
-
     def print(self, ctg):
         """ Pretty print of a contingency table ctg """
         protectedDesc = ' ' if self.unprotected is None else self.decodes[ctg.protected]
@@ -723,8 +671,8 @@ class DD:
         all_covered = db.cover_none()
         for c in covers:
             all_covered |= db.cover(c.ctx)
-        ctg = self.ctg_any(all_covered)
-        ctg_rem = self.ctg_any(db.cover_all()-all_covered)
+        ctg = self.ctg_any([-1], cover=all_covered)
+        ctg_rem = self.ctg_any([-1], cover=db.cover_all()-all_covered)
         return (covers, residuals, times, active-self.unprCover, ctg, ctg_rem)
 
 """ Sample usage """

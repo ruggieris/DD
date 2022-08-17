@@ -37,24 +37,6 @@ def argmax(values, f):
             mv, p = fv, i
     return p, mv
 
-class Pair:
-    """ Pair of objects lexicographic ordered """
-    def __init__(self, a, b):
-        self.a = a
-        self.b = b
-
-    def __lt__(self, other):
-        """ lexicographic ordering """
-        return self.a < other.a or (self.a == other.a and self.b < other.b)
-    
-    def __le__(self, other):
-        """ lexicographic ordering """
-        return self.a < other.a or (self.a == other.a and self.b <= other.b)
-    
-    def __eq__(self, other):
-        """ lexicographic ordering """
-        return self.a == other.a and self.b == other.b
-    
 def getReader(filename, encoding='utf8'):
     """ Return a reader from a file, url, or gzipped file/url """
     if filename=='':
@@ -237,13 +219,13 @@ class tDBIndex:
 class ContingencyTable:
     """ A contingency table. 
     
-     contingency table for inference (protected=true.bad, n1=a,n2=c)
+     contingency table for inference (unprotected=true.good, n1=a,n2=c)
      ===========
      true.bad      a             
      true.good     c             
      ===========   n()
     
-     confusion matrix (protected=true.bad)
+     confusion matrix (unprotected=true.good)
      =========== pred.bad === pred.good === 
      true.bad        a            b       n1()
      true.good       c            d       n2()
@@ -323,6 +305,10 @@ class ContingencyTable:
     def acc(self):
         """ predictive accuracy """
         return (self.a+self.d)/self.n()
+
+    def err(self):
+        """ predictive accuracy """
+        return (self.b+self.c)/self.n()
 
     def p1(self):
         """ a/n1, i.e., precision of bad """
@@ -630,7 +616,7 @@ class DD:
             print(spec.format(self.trueGoodItem, ctg.FPp, ctg.TNp, ctg.Np(), self.trueGoodItem, ctg.FPu, ctg.TNu, ctg.Nu()))
             print(spec.format('', ctg.a, ctg.b, ctg.n1(), '', ctg.d, ctg.c, ctg.n2()))
             
-    def cover_n(self, patterns, f, k=None):
+    def cover_n(self, patterns, f, k=None, only_protected=True):
         """ Naive max cover 
         
         Parameters:
@@ -656,7 +642,10 @@ class DD:
             if bestv is None:
                 break
             bestb = self.ctg_rel(pset[bestp], base=active)
-            new_cov = db.cover(bestb.ctx+(bestb.protected,), base=active)
+            if only_protected:
+                new_cov = db.cover(bestb.ctx+(bestb.protected,), base=active)
+            else:
+                new_cov = db.cover(bestb.ctx, base=active)
             new_supp = len(new_cov) # newly covered protected
             if new_supp==0:
                 break

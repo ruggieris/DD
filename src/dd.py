@@ -184,9 +184,10 @@ def encode(df):
 
 class tDBIndex:
     """ A transaction database index storing covers of item in bitmaps """
-    def __init__(self, tDB):
+    def __init__(self, tDB, items=None):
         """ Create database index from a list of transactions """
-        items =  { item for t in tDB for item in t }
+        if items is None:
+            items =  { item for t in tDB for item in t }
         covers = { item:pyroaring.BitMap() for item in items }
         for tid, t in enumerate(tDB):
             for item in t:
@@ -418,7 +419,7 @@ class DD:
             self.tDB, self.codes, self.decodes = CSV2tranDB(df, na_values=na_values, domains=domains, codes=codes)
         self.decodes[-1] = unprotectedItem.replace('=', '!=')
         #print(self.decodes)
-        self.itDB = tDBIndex(self.tDB)
+        self.itDB = tDBIndex(self.tDB, self.codes.values())
 
         self.unprotectedItem = unprotectedItem
         self.sensitiveAtt = get_att(unprotectedItem)

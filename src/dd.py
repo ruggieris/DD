@@ -82,7 +82,7 @@ def get_val(itemDesc):
     pos = itemDesc.find('=')
     return itemDesc[pos+1:] if pos>=0 else ''
  
-def CSV2tranDB(filename, sep=',', na_values={'?'}, domains=dict(), codes=dict()):
+def CSV2tranDB(filename, sep=',', na_values={'?'}, domains=dict(), codes=dict(), valuedecode=None):
     """ Read a CSV or ARFF file and encode it as a transaction database of attribute=value items
     
     Parameters:
@@ -113,8 +113,8 @@ def CSV2tranDB(filename, sep=',', na_values={'?'}, domains=dict(), codes=dict())
                if item in na_values:
                    continue
                if att in domains and item not in domains[att]:
-                   continue                
-               attitem = att + "=" + item
+                   continue                           
+               attitem = att + "=" + (str(item) if valuedecode is None else valuedecode[att][item])
                code = codes.get(attitem) # code of attitem
                if code is None:
                    codes[attitem] = code = nitems
@@ -126,13 +126,15 @@ def CSV2tranDB(filename, sep=',', na_values={'?'}, domains=dict(), codes=dict())
     decodes = {code:attitem for attitem, code in codes.items()}
     return (tDB, codes, decodes)
 
-def PD2tranDB(df, na_values={'NaN'}, domains=dict(), codes=dict()):
+def PD2tranDB(df, na_values={'NaN'}, domains=dict(), codes=dict(), valuedecode=None):
     """ Read a dataframe and encode it as a transaction database of attribute=value items
     
     Parameters:
     df (pd.DataFrame): dataframe
     na_values (set: string coding missing values
-    domains (dictionary): dictionary mapping binary variable names to values to be encoded. If a variable is not mapped, all values are encoded
+    domains (dictionary): dictionary mapping variable names to values to be encoded. If a variable is not mapped, all values are encoded
+    codes (dictionary): extend existing codes
+    decodes (dictionary): extend existing codes
     
     Returns:
     list: list of transactions
@@ -148,7 +150,7 @@ def PD2tranDB(df, na_values={'NaN'}, domains=dict(), codes=dict()):
                 continue
             if att in domains and item not in domains(att):
                 continue                
-            attitem = att + "=" + str(item)
+            attitem = att + "=" + (str(item) if valuedecode is None else valuedecode[att][item])
             code = codes.get(attitem) # code of attitem
             if code is None:
                codes[attitem] = code = nitems
@@ -160,13 +162,12 @@ def PD2tranDB(df, na_values={'NaN'}, domains=dict(), codes=dict()):
     decodes = {code:attitem for attitem, code in codes.items()}
     return (tDB, codes, decodes)
 
-def encode(df):
+def encode(df, atts=None):
     """ Encode a dataframe of categories
     
     Parameters:
     df (pd.DataFrame): dataframe
-    na_values (set: string coding missing values
-    domains (dictionary): dictionary mapping variable names to values to be encoded. If a variable is not mapped, all values are encoded
+    atts (iterable): attributes to encode or None for all attributes
     
     Returns:
     dict: coding of items to numbers
@@ -174,7 +175,8 @@ def encode(df):
     """
     res = pd.DataFrame()
     encoders = dict()
-    for col in df.columns:
+    atts = df.columns if atts is None else atts
+    for col in atts:
         col_encoder = LabelEncoder()
         res[col] = col_encoder.fit_transform(df[col])
         res.loc[df[col].isnull(), col] = np.nan
@@ -402,7 +404,8 @@ class ContingencyTable:
 class DD:
     """ Discrimination discovery class. """
     def __init__(self, df, unprotectedItem, predBadItem=None, trueBadItem=None, 
-                         na_values={'NaN', 'nan', '?'}, domains=dict(), codes=dict()):
+                         na_values={'NaN', 'nan', '?'}, domains=dict(), 
+                         codes=dict(), valuedecode=None):
         """ Init with given parameters
         
         Parameters:
@@ -414,9 +417,9 @@ class DD:
         domains (dictionary): dictionary mapping binary variable names to values to be encoded. If a variable is not mapped, all values are encoded
         """
         if isinstance(df, pd.DataFrame):
-            self.tDB, self.codes, self.decodes = PD2tranDB(df, na_values=na_values, domains=domains, codes=codes)
+            self.tDB, self.codes, self.decodes = PD2tranDB(df, na_values=na_values, domains=domains, codes=codes, valuedecode=valuedecode)
         else:
-            self.tDB, self.codes, self.decodes = CSV2tranDB(df, na_values=na_values, domains=domains, codes=codes)
+            self.tDB, self.codes, self.decodes = CSV2tranDB(df, na_values=na_values, domains=domains, codes=codes, valuedecode=valuedecode)
         self.decodes[-1] = unprotectedItem.replace('=', '!=')
         #print(self.decodes)
         self.itDB = tDBIndex(self.tDB, self.codes.values())

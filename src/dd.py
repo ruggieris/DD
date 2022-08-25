@@ -618,7 +618,7 @@ class DD:
             print(spec.format('', self.predBadItem, self.predGoodItem, '', '', self.predBadItem, self.predGoodItem, ''))
             print(spec.format(self.trueBadItem, ctg.TPp, ctg.FNp, ctg.Pp(), self.trueBadItem, ctg.TPu, ctg.FNu, ctg.Pu()))
             print(spec.format(self.trueGoodItem, ctg.FPp, ctg.TNp, ctg.Np(), self.trueGoodItem, ctg.FPu, ctg.TNu, ctg.Nu()))
-            print(spec.format('', ctg.a, ctg.b, ctg.n1(), '', ctg.d, ctg.c, ctg.n2()))
+            print(spec.format('', ctg.a, ctg.b, ctg.n1(), '', ctg.c, ctg.d, ctg.n2()))
             
     def cover_n(self, patterns, f, k=None, only_protected=True):
         """ Naive max cover 

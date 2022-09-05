@@ -16,7 +16,7 @@ import gzip
 import codecs
 import heapq
 import time
-from sklearn.preprocessing import LabelEncoder
+import math
 
 def argmax(values, f):
     """ Argmax function 
@@ -162,27 +162,42 @@ def PD2tranDB(df, na_values={'NaN'}, domains=dict(), codes=dict(), valuedecode=N
     decodes = {code:attitem for attitem, code in codes.items()}
     return (tDB, codes, decodes)
 
-def encode(df, atts=None):
-    """ Encode a dataframe of categories
-    
-    Parameters:
-    df (pd.DataFrame): dataframe
-    atts (iterable): attributes to encode or None for all attributes
-    
-    Returns:
-    dict: coding of items to numbers
-    dict: decoding of numbers to items
-    """
-    res = pd.DataFrame()
-    encoders = dict()
-    atts = df.columns if atts is None else atts
-    for col in atts:
-        col_encoder = LabelEncoder()
-        res[col] = col_encoder.fit_transform(df[col])
-        res.loc[df[col].isnull(), col] = np.nan
-        res[col] = res[col].astype('category')
-        encoders[col] = col_encoder
-    return (res, encoders)
+class Encode:
+    """ Encoding of discrete attributes in dataframes """
+    def __init__(self, atts=None, decode=dict()):
+        """ Constructor 
+        
+        Parameters:
+        atts (iterable): attributes to encode or None for all attributes
+        decode (dictionary): pre-set encodings to reuse        
+        """
+        self.atts = atts
+        self.decode = decode
+        self.encode = { c:{i:v for v, i in self.decode[c].items()} for c in self.decode}
+
+    def fit_transform(self, df):
+        """ Encode a dataframe of categories
+        
+        Parameters:
+        df (pd.DataFrame): dataframe
+        
+        Returns:
+        pd.DataFrame: encoded dataframe
+        """
+        res = pd.DataFrame()
+        self.atts = df.columns if self.atts is None else self.atts
+        self.encode = { c:{i:v for v, i in self.decode[c].items()} for c in self.decode}
+        for col in self.atts:
+            if col not in self.encode:
+                uniq = sorted([v for v in df[col].unique() if pd.notna(v)])
+                self.encode[col] = { v:i for i, v in enumerate(uniq) }
+            res[col] = df[col].map(self.encode[col])
+            #res.loc[df[col].isnull(), col] = np.nan
+            res[col] = res[col].astype('category')
+        self.decode = { c:{i:v for v, i in self.encode[c].items()} for c in self.encode}
+        for col in set(df.columns)-set(self.atts):
+            res[col] = df[col]
+        return res
 
 class tDBIndex:
     """ A transaction database index storing covers of item in bitmaps """
@@ -669,7 +684,142 @@ class DD:
         ctg_uncov = self.ctg_any([-1], cover=db.cover_all()-all_covered)
         return (covers, residuals, times, active-self.unprCover, ctg_cov, ctg_uncov)
 
-""" Sample usage """
+
+class ID:
+    """ Distance functions and individual discrimination utils. """
+    def __init__(self, df, nominal_atts=[], continuous_atts=[], ordinal_atts=[]):
+        """ Init with given parameters
+        
+        Parameters:
+        df (pd.DataFrame): dataframe, used to collect statistics about distributions
+        nominal_atts (iterable): nominal feature names
+        continuous_atts (iterable): continuous feature names
+        ordinal_atts (iterable): ordinal feature names
+        """
+        self.nominal_atts = nominal_atts
+        self.continuous_atts = continuous_atts
+        self.ordinal_atts = ordinal_atts
+        self.natts = len(continuous_atts)+len(nominal_atts)+len(ordinal_atts)
+        # statistics of continuous features
+        self.means = { c:df[c].mean() for c in continuous_atts }
+        self.stds = { c:df[c].std() for c in continuous_atts }
+        # statistics of ordinal feastures
+        self.nofvalues = { c:(df[c].nunique()-1) for c in ordinal_atts }
+        # positions of features (for future usage)
+        cols = list(df.columns)
+        self.nominal_atts_pos = [cols.index(c) for c in nominal_atts]
+        self.continuous_atts_pos = [cols.index(c) for c in continuous_atts]
+        self.ordinal_atts_pos = [cols.index(c) for c in ordinal_atts]
+        self.stds_pos = { self.continuous_atts_pos[i]:self.stds[c] for i, c in enumerate(continuous_atts) }
+        self.nofvalues_pos = { self.ordinal_atts_pos[i]:self.nofvalues[c] for i, c in enumerate(ordinal_atts) }
+              
+    def kdd2011dist(self, t, tset):
+        """ Distance function used in the KDD 2011 paper. 
+        
+        Parameters:
+        t (dictionary): instance to compute distance from
+        tset (DataFRame or dictionary): set of instances to compute distance to
+        
+        Returns:
+        pd.Series or float: distances
+        """
+        if isinstance(tset, pd.DataFrame):
+            tot = pd.Series(np.zeros(len(tset)), index=tset.index)
+            for c in self.continuous_atts:
+                dist = abs(t[c]-tset[c])/self.stds[c]
+                dist[dist.isnull()] = 3
+                tot += dist
+            for c in self.nominal_atts:
+                tot += 1*(t[c]!=tset[c]) # notice t[c]!=tset[c] is True if one or both are NaN
+            for c in self.ordinal_atts:
+                nvals = self.nofvalues[c]
+                val = t[c]/nvals
+                tmp = tset[c]/nvals
+                if math.isnan(val):
+                    dist = max(tmp, 1-tmp)
+                    dist[dist.isnull()] = 1
+                else:
+                    dist = abs(val-tmp)
+                    dist[dist.isnull()] = max(val, 1-val)
+                tot += dist
+        else:
+            tot = 0
+            for c in self.continuous_atts:
+                dist = 3 if math.isnan(tset[c]) else abs(t[c]-tset[c])/self.stds[c]
+                tot += dist
+            for c in self.nominal_atts:
+                tot += 1*(t[c]!=tset[c]) # notice t[c]!=tset[c] is True if one or both are NaN
+            for c in self.ordinal_atts:
+                nvals = self.nofvalues[c]
+                val = t[c]/nvals
+                tmp = tset[c]/nvals
+                if math.isnan(val):
+                    dist = 1 if math.isnan(tmp) else max(tmp, 1-tmp)
+                else:
+                    dist = max(val, 1-val) if math.isnan(tmp) else abs(val-tmp)
+                tot += dist
+        return tot/self.natts
+    
+    def topk(self, t, tset, distf, k, maxd=None):
+        """ Compute top-k instances close to a given one.
+        
+        Parameters:
+        t (dictionary): instance to compute distance from
+        tset (DataFrame or dictionary): set of instances to compute distance to
+        distf (function): distance function
+        k (int): number of closest instances
+        maxd (float): max distance between t and the closest ones
+        
+        Returns:
+        list of pairs: list of (distance, index) of the up-to-k closest instances to t that are at a distance of at most maxd 
+        """
+        ds = distf(t, tset)
+        q = []
+        lenq = 0
+        for i, d in zip(tset.index, ds):
+            if maxd is None or d <= maxd:
+                if lenq < k:
+                    heapq.heappush(q, (-d, i))
+                    lenq += 1
+                else:
+                    d1, _ = heapq.heappushpop(q, (-d, i))
+                    maxd = -d1
+        q = [(-v, i) for v, i in q]
+        return sorted(q)
+    
+    def topkdiff(self, df, unpro, pro, class_att, distf, k, maxd=None):
+        """ Compute risk difference for each instance in protected set.
+        
+        Parameters:
+        df (DataFrame): dataset
+        unpro (Series): condition for unprotected instances
+        pro (Series or list): condition for protected instances, or list of conditions for a number of protected groups
+        class_att (string): decision attribute
+        distf (function): distance function
+        k (int): number of closest instances
+        maxd (float): max distance between t and the closest ones
+        
+        Returns:
+        Series: risk difference between topk protected and topk unprotected for protected instances, and zero for all other instances in the dataframe df
+        """
+        res = pd.Series(np.zeros(len(df)), index=df.index)
+        unpro_set = df[unpro]
+        if not isinstance(pro, list): 
+            pro = [pro]
+        for protected in pro:
+            pro_set = df[protected]
+            for i, rowp in pro_set.iterrows():
+                res1 = self.topk(rowp, pro_set, distf, k+1, maxd=maxd)
+                res2 = self.topk(rowp, unpro_set, distf, k, maxd=maxd)
+                nn1 = [j for _, j in res1 if j != i]
+                nn2 = [j for _, j in res2]
+                # efficient but specific of RD
+                p1 = sum(pro_set.loc[nn1, class_att]==0)/len(nn1)
+                p2 = sum(unpro_set.loc[nn2, class_att]==0)/len(nn2)
+                res.loc[i] = p1-p2
+        return res
+    
+""" Sample usage of DD"""
 if __name__ == '__main__':
         
     def check_acc(ctg):

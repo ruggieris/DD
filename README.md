@@ -3,7 +3,7 @@
 Department of Computer Science, University of Pisa, Italy  
 salvatore.ruggieri@unipi.it
 
-A Python version of the Discrimination Discovery approach of [[1]](#references), including independence and separation fairness metrics. Original implementation in SQL/Java was in the DCUBE system [[2]](#references), now discontinued. An alternative implementation (less metrics, more algorithms) is available in Java [[3]](#references) from [my home page](http://pages.di.unipi.it/ruggieri/software.html), but it is discontinued as well in favor of this Python version. The library is extended to include the Individual Discrimination Discovery and Prevention of [4].
+A Python version of the Discrimination Discovery approach of [[1]](#references), including independence and separation fairness metrics. Original implementation in SQL/Java was in the DCUBE system [[2]](#references), now discontinued. An alternative implementation (less metrics, more algorithms) is available in Java [[3]](#references) from [my home page](http://pages.di.unipi.it/ruggieri/software.html), but it is discontinued as well in favor of this Python version. The library is extended to include the Individual Discrimination Discovery and Prevention approach of [4].
 
 
 ## References

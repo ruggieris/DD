@@ -814,8 +814,9 @@ class ID:
                 nn1 = [j for _, j in res1 if j != i]
                 nn2 = [j for _, j in res2]
                 # efficient but specific of RD
-                p1 = sum(pro_set.loc[nn1, class_att]==0)/len(nn1)
-                p2 = sum(unpro_set.loc[nn2, class_att]==0)/len(nn2)
+                i_dec = pro_set.loc[i, class_att]
+                p1 = sum(pro_set.loc[nn1, class_att]==i_dec)/len(nn1)
+                p2 = sum(unpro_set.loc[nn2, class_att]==i_dec)/len(nn2)
                 res.loc[i] = p1-p2
         return res
     

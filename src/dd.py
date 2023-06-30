@@ -468,6 +468,7 @@ class DD:
             self.trueAtt = get_att(trueBadItem)
             self.trueBad = self.codes[trueBadItem]
             posTrue_s = [self.codes[v] for v in self.codes if get_att(v)==self.trueAtt and self.codes[v]!=self.trueBad]
+            #print(posTrue_s)
             assert len(posTrue_s) == 1, "binary decisions only!"
             self.trueGood = posTrue_s[0]
             self.trueGoodItem = self.decodes[self.trueGood]

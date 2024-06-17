@@ -145,7 +145,7 @@ def PD2tranDB(df, na_values={'NaN'}, domains=dict(), codes=dict(), valuedecode=N
     tDB = []
     for _, row in df.iterrows():
         transaction = []
-        for att, item in row.iteritems():
+        for att, item in row.items():
             if item in na_values:
                 continue
             if att in domains and item not in domains(att):
@@ -546,7 +546,8 @@ class DD:
         """
         exclude = {self.codes[v] for v in self.codes if get_att(v) in {self.sensitiveAtt, self.predAtt, self.trueAtt}}
         tDBprojected = [list(set(t)-exclude) for t in self.tDB]
-        fisets = fim.fpgrowth(tDBprojected, supp=minSupp, zmin=0, target=target)
+        # eval and thresh argument to solve a bug in pyfim (in Windows, not in Colab), default value does not work :-(
+        fisets = fim.fpgrowth(tDBprojected, supp=minSupp, zmin=0, target=target, eval='o', thresh=minSupp) 
         q = []
         if self.predBadItem is None:
             for fi in fisets:

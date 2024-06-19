@@ -23,7 +23,7 @@ A Python version of the Discrimination Discovery approach of [[1]](#references),
     conda activate DD
     git clone https://github.com/ruggieris/DD.git
     pip install -r src/requirements.txt
-	jupyter notebook notebooks/dd_tutorial.ipynb
+    jupyter notebook notebooks/dd_tutorial.ipynb
 ```
 
 ## References

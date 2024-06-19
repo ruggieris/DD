@@ -1,0 +1,14 @@
+dalex
+fairlearn
+jupyter
+lightgbm
+lime
+numpy
+pandas
+pydotplus
+pyfim 
+pyroaring
+scikit_learn
+scipy
+seaborn
+shap
